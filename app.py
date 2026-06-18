@@ -70,4 +70,19 @@ async def extract_expense(request: ExtractRequest):
 # 本地调试可以保留，生产环境通过 uvicorn 启动
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+
+    # 1. 优先读取 Render 环境分配的端口，如果读取不到（比如在本地），则默认用 8000
+    port = int(os.getenv("PORT", 8000))
+
+    # 2. 区分本地开发和生产环境
+    # 如果是在 Render 环境（通常会注入 PORT 变量），关闭 reload
+    # 如果是在本地，可以继续开启 reload
+    is_local = os.getenv("PORT") is None
+
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=port,
+        reload=is_local  # 本地开发时为 True，Render 生产环境自动变为 False
+    )
