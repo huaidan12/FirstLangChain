@@ -26,12 +26,12 @@ class ExpenseItem(BaseModel):
 # 3. 初始化 LangChain 核心组件
 # 确保生产环境配置了正确的环境变量
 llm = ChatOpenAI(
-    model="gpt-4o-mini",  # 生产环境建议用性价比高的轻量模型
+    model="qwen-omni-turbo",  # 生产环境建议用性价比高的轻量模型
     temperature=0,        # 提取任务必须为 0，保证结果确定性
     timeout=30,           # 上游卡住时最多等 30 秒，避免请求一直挂着
     max_retries=2,        # 网络抖动时自动重试 2 次
-    api_key=os.getenv("OPENAI_API_KEY"),
-    base_url=os.getenv("OPENAI_API_BASE")
+    api_key=os.getenv("sk-ws-H.RPHHXMY.Trun.MEUCIQCSh_HmgjLR_F_p_4vAeazw5zVGhaaOJU_qu6rAVE6vsQIgHij9ZVdlRu8bKfbtBDIv5fk0DgYNqYopSowIG0E68Nw"),
+    base_url=os.getenv("https://ws-2x14s2z2rcgy6xyx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1")
 )
 
 parser = PydanticOutputParser(pydantic_object=ExpenseItem)
