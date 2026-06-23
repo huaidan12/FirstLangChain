@@ -91,6 +91,87 @@ curl -X POST http://localhost:8000/run_task \
   -d '{"requirement": "...", "thread_id": "a1b2c3..."}'
 ```
 
+## RAG 数据流转
+
+整条链路有三个独立角色，谁存什么、谁吃什么要分清楚：
+
+| 角色 | 存储内容 | 在链路里干什么 |
+|---|---|---|
+| **业务 DB**（MySQL/PG，本 demo 用硬编码 `SEED_CASES` 模拟）| 历史报错案例的"权威原文" | 数据主权方，新增/修改在这里发生 |
+| **向量数据库**（Milvus）| 同一份数据的"向量 + 原文冗余" | 语义召回索引，给 Agent 查相似 |
+| **LLM**（DashScope）| 不存东西 | 拿召回的原文做推理 |
+
+**关键点：LLM 从来不吃向量，吃的是文本。** 向量只是"找相似"的中间产物，召回后会被丢掉，只把对应的原文塞进 prompt。
+
+### 写入阶段（离线/异步）
+
+```
+业务 DB 文本 ──► [Embedding 模型] ──► 向量 ──┐
+                                              ├──► Milvus（同一行同时存 vector + text）
+业务 DB 文本 ───────────────────────────────  ┘
+```
+
+对应代码 `app/knowledge_base.py:83`：
+
+```python
+rows = [{"vector": vec, "text": doc.page_content} for vec, doc in zip(...)]
+#         ^^^^^^^^^^^^                              ^^^^^^^^^^^^^^^^^^^^^^^^
+#         给搜索用                                   给 LLM 读
+```
+
+### 检索阶段（在线/热路径）
+
+```
+当前 error_msg ──► [Embedding 模型] ──► 查询向量 ──► Milvus 相似度搜索
+                                                            │
+                                          Top-K 命中行的「原文 text」
+                                                            │
+                                                            ▼
+                                            ChatPromptTemplate 的 {rag_context}
+                                                            │
+                                                            ▼
+                                                       LLM.invoke()
+```
+
+对应代码：
+
+- `app/knowledge_base.py:103` `embed_query(error_msg)` —— 文本转查询向量
+- `app/knowledge_base.py:104-109` `client.search(..., output_fields=["text"])` —— 注意拿的是 `text` 不是 `vector`
+- `app/knowledge_base.py:119` 把命中原文拼成可读 block
+- `app/nodes.py:54` `{rag_context}` 占位符把原文注入 prompt
+
+### 写入和查询必须用同一个 embedding 模型
+
+`app/knowledge_base.py:18-25` 写入和 `:103` 查询共用同一个 `OpenAIEmbeddings` 实例（`text-embedding-v3` / 1024 维）。**生产换模型必须重建 collection**，不能新旧向量混用——它们处在不同的向量空间，距离没有意义。
+
+### 生产部署：同步要从推理热路径剥离
+
+本 demo 把"建表 + 灌种子"塞在第一次检索的副作用里（`_ensure_collection_and_seed`），生产不能这样做：
+
+```
+                ┌────────────────────────┐
+                │   业务 DB (MySQL/PG)    │  ← 数据主权方
+                └───────────┬────────────┘
+                            │
+                            │ 定时/CDC 同步（独立进程或 CronJob）
+                            ▼
+                ┌────────────────────────┐
+                │   Milvus Standalone     │  ← 持久化向量副本
+                │   （挂 PVC / 对象存储） │     重启不丢
+                └───────────┬────────────┘
+                            │ 检索（热路径，只读）
+                            ▼
+                ┌────────────────────────┐
+                │   Agent 服务            │  ← 重启不重灌
+                │   (coder_node 等)       │
+                └────────────────────────┘
+```
+
+- **同步任务**：定时全量（量小）/ 定时增量（基于 `updated_at` 水位）/ CDC 实时（Canal、Debezium）三选一。
+- **重启不需要重灌**：Milvus 持久化在磁盘/对象存储上，`if client.has_collection: return` 这一守卫就够了（见 `app/knowledge_base.py:69`）。
+- **检索热路径绝不碰业务 DB**：`retrieve_similar_cases` 只查 Milvus，不要每次请求都去 DB 校验差异。
+- **容器化部署**：Milvus Lite 的 `data/milvus_demo.db` 必须挂持久卷，否则 Pod 重建即丢；生产建议直接换 Milvus Standalone/Cluster。
+
 ## 向量库工作时序
 
 `retrieve_similar_cases()` 每次被 `coder_node` 重试分支调用时实际发生的事：
