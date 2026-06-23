@@ -141,7 +141,20 @@ ConnectionNotExistException: should create connection first.
 
 **解决**：放弃 `langchain-milvus.Milvus`，改用 `pymilvus.MilvusClient` 直连，每次检索新建 client 实例。`MilvusClient` 内部用唯一 alias 隔离连接。
 
-### 4. DashScope embedding 不接受 token-id 数组
+### 4. Milvus Lite 老 collection 默认 released 状态
+
+复用已有 DB 时，新建 `MilvusClient` 拿到的 collection 是 "released"（数据在磁盘但没装内存索引），直接 `search` 报：
+
+```
+MilvusException: Collection 'agent_error_cases' is in state 'released';
+call load() before search/get/query
+```
+
+只有首次 `create_collection` 那条路径会隐式 load，第二次启动 / 第二次连入就会踩这个雷。
+
+**解决**：每次 search 前显式 `client.load_collection(COLLECTION_NAME)`。已 load 的 collection 重复 load 是空操作，不会有副作用。
+
+### 5. DashScope embedding 不接受 token-id 数组
 
 `OpenAIEmbeddings` 默认会用 tiktoken 在本地把字符串切成整数 token-id 数组发出去，DashScope 的 OpenAI 兼容端点只认字符串，报：
 
@@ -150,6 +163,12 @@ InvalidParameter: Value error, contents is neither str nor list of str
 ```
 
 **解决**：构造 `OpenAIEmbeddings` 时加 `check_embedding_ctx_length=False`，关闭本地切词。
+
+## 重启服务后再次触发会怎样
+
+- **`data/checkpoint.sqlite` 会保留**：所有 thread 的 checkpoint 还在，传同一个 `thread_id` 可以接续上次的状态。
+- **`data/milvus_demo.db/` 会保留**：种子数据不会重灌，但每次新进程的第一次检索会触发一次 `load_collection`（毫秒级开销）。
+- **想完全重置**：`rm -rf data/`。
 
 ## 这些设计选择的来由
 

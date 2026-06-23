@@ -13,7 +13,7 @@ def extract_python_code(raw: str) -> str:
     return raw.strip()
 
 # 本地调试用常量，生产请替换为环境变量
-OPENAI_API_KEY = "sk-ws-H.RPHHXMY.lkZo.MEQCIE-XRm1YtDEXK67dfqax"
+OPENAI_API_KEY = "sk-ws-H.RPHHXMY.lkZo.MEQCIE-XRm1YtDEXK67dfqax-"
 OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 # 定义全局状态机的数据契约

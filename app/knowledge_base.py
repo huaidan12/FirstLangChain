@@ -97,6 +97,9 @@ def retrieve_similar_cases(error_msg: str, k: int = 2) -> str:
         client = MilvusClient(uri=MILVUS_URI)
         _ensure_collection_and_seed(client)
 
+        # 新建的 client 连接老 collection 时默认 released 状态，必须显式 load 才能 search
+        client.load_collection(COLLECTION_NAME)
+
         query_vec = embeddings.embed_query(error_msg)
         results = client.search(
             collection_name=COLLECTION_NAME,
