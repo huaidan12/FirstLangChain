@@ -91,6 +91,56 @@ curl -X POST http://localhost:8000/run_task \
   -d '{"requirement": "...", "thread_id": "a1b2c3..."}'
 ```
 
+## 向量库工作时序
+
+`retrieve_similar_cases()` 每次被 `coder_node` 重试分支调用时实际发生的事：
+
+```
+首次启动 ────────────┐
+  第 1 次检索请求    │
+    ├─ has_collection? → False
+    ├─ create_collection                    🐢 一次性
+    ├─ embed 5 条种子（5 次 embedding 调用） 🐢 一次性
+    ├─ insert 入库                           🐢 一次性
+    ├─ load_collection（隐式）
+    ├─ embed query（1 次 embedding 调用）    🚀 每次
+    └─ search                                🚀 每次
+
+  第 2 次检索请求 ──┐
+    ├─ has_collection? → True → 直接 return
+    ├─ load_collection（已 load，no-op）
+    ├─ embed query（1 次 embedding 调用）    🚀
+    └─ search                                🚀
+
+  ... 重启服务 ...
+  第 N 次检索请求 ──┐ (collection 仍在磁盘)
+    ├─ has_collection? → True → 直接 return
+    ├─ load_collection（这次是真 load，把磁盘数据装内存） ⚠️ 一次性几十毫秒
+    ├─ embed query（1 次 embedding 调用）    🚀
+    └─ search                                🚀
+```
+
+各步骤频率与开销：
+
+| 操作 | 频率 | 开销 |
+|---|---|---|
+| `MilvusClient(uri=...)` 新建客户端 | 每次都新建 | 几毫秒 |
+| `has_collection()` 幂等检查 | 每次 | 极小 |
+| `create_collection()` 建表 | **只第一次** | 一次性 |
+| `embed_documents([5 条种子])` | **只第一次** | 5 次 embedding API 调用 |
+| `insert(...)` 灌种子数据 | **只第一次** | 一次性 |
+| `load_collection()` 装入内存索引 | 每次调用，已 load 时 no-op | 同进程极小，新进程几十毫秒 |
+| `embed_query(error_msg)` 查询向量化 | **每次都算** | 1 次 embedding API 调用 |
+| `search(...)` ANN 检索 | 每次都搜 | 极快（5 条数据） |
+| `client.close()` 关连接 | 每次 | 几毫秒 |
+
+唯一每次都跑的"重活"是 `embed_query`——因为查询文本不一样，必须每次都让 embedding 模型重新算，这是 RAG 检索的固有成本，跟向量库本身无关。
+
+**重启服务后再次触发**：
+- `data/checkpoint.sqlite` 保留：所有 thread 的 checkpoint 还在，传同一 `thread_id` 可接续上次状态。
+- `data/milvus_demo.db/` 保留：种子数据不会重灌，新进程第一次检索会触发一次真正的 `load_collection`（毫秒级开销）。
+- 完全重置：`rm -rf data/`。
+
 ## 关键依赖
 
 | 包 | 版本 | 作用 |
@@ -163,12 +213,6 @@ InvalidParameter: Value error, contents is neither str nor list of str
 ```
 
 **解决**：构造 `OpenAIEmbeddings` 时加 `check_embedding_ctx_length=False`，关闭本地切词。
-
-## 重启服务后再次触发会怎样
-
-- **`data/checkpoint.sqlite` 会保留**：所有 thread 的 checkpoint 还在，传同一个 `thread_id` 可以接续上次的状态。
-- **`data/milvus_demo.db/` 会保留**：种子数据不会重灌，但每次新进程的第一次检索会触发一次 `load_collection`（毫秒级开销）。
-- **想完全重置**：`rm -rf data/`。
 
 ## 这些设计选择的来由
 
