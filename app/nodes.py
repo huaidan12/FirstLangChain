@@ -38,16 +38,27 @@ def coder_node(state: AgentState) -> Dict:
     print(f"--> [Node] Coder 开始第 {state['iterations'] + 1} 次代码编排...")
 
     if state['error_msg']:
+        # 从 Milvus Lite 拉取相似的历史报错案例做 RAG 注入
+        # 延迟导入：避免 nodes.py 与 knowledge_base.py 循环依赖
+        from app.knowledge_base import retrieve_similar_cases
+        rag_context = retrieve_similar_cases(state['error_msg'], k=2)
+        if rag_context:
+            print(f"--> [Node] Coder 注入 RAG 上下文，命中 {rag_context.count('案例')} 条相似案例。")
+
         # 带有错误上下文的修复提示词
         prompt = ChatPromptTemplate.from_template(
             "你是一个精通 Python 的资深架构师。\n"
             "用户原始需求: {requirement}\n\n"
             "你之前生成的代码运行失败了:\n```python\n{code}\n```\n\n"
             "执行单测时的报错信息如下:\n{error_msg}\n\n"
+            "知识库中检索到的相似历史案例（仅供参考，可能与当前问题无关）:\n{rag_context}\n\n"
             "请分析原因并修复它。注意：只输出可以直接运行的纯 Python 代码，绝对不要包含 ```python 等 Markdown 标记，必须包含 execute() 函数作为入口。"
         )
         inputs = prompt.format_messages(
-            requirement=state['requirement'], code=state['code'], error_msg=state['error_msg']
+            requirement=state['requirement'],
+            code=state['code'],
+            error_msg=state['error_msg'],
+            rag_context=rag_context or "（无）",
         )
     else:
         # 初次生成提示词

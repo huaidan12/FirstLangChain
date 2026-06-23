@@ -6,3 +6,6 @@ __pycache__/
 .env
 .idea/
 .DS_Store
+
+# Checkpointer & Milvus Lite 落盘
+data/

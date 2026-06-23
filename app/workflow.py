@@ -1,5 +1,14 @@
+import os
+import sqlite3
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
 from app.nodes import AgentState, coder_node, tester_node
+
+# Checkpointer 落盘位置
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+CHECKPOINT_DB = os.path.join(DATA_DIR, "checkpoint.sqlite")
+
 
 def decide_next_step(state: AgentState) -> str:
     """条件路由函数：控制流的‘看门狗’"""
@@ -37,8 +46,12 @@ def create_agent_app():
         }
     )
 
-    # 4. 编译图应用（此处可以外挂 PostgresSaver 作为 checkpointer 实现高可用，本 Demo 暂用内存状态）
-    return workflow.compile()
+    # 4. 编译图应用，挂载 SqliteSaver 做轻量 Checkpointer：
+    #    - 持久化每一步的图状态，支持按 thread_id 续跑/回放
+    #    - check_same_thread=False 是为了让 FastAPI 多线程下也能复用同一连接
+    conn = sqlite3.connect(CHECKPOINT_DB, check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
+    return workflow.compile(checkpointer=checkpointer)
 
 # 暴露单例应用
 agent_executor = create_agent_app()
