@@ -2,7 +2,7 @@ import re
 from typing import Dict, TypedDict
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from app.sandbox import CodeSandbox
+from projects.coder.sandbox import CodeSandbox
 
 
 def extract_python_code(raw: str) -> str:
@@ -40,7 +40,7 @@ def coder_node(state: AgentState) -> Dict:
     if state['error_msg']:
         # 从 Milvus Lite 拉取相似的历史报错案例做 RAG 注入
         # 延迟导入：避免 nodes.py 与 knowledge_base.py 循环依赖
-        from app.knowledge_base import retrieve_similar_cases
+        from projects.coder.knowledge_base import retrieve_similar_cases
         rag_context = retrieve_similar_cases(state['error_msg'], k=2)
         if rag_context:
             print(f"--> [Node] Coder 注入 RAG 上下文，命中 {rag_context.count('案例')} 条相似案例。")

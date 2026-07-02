@@ -5,7 +5,11 @@ __pycache__/
 *.pyo
 .env
 .idea/
+*.iml
 .DS_Store
+
+# Claude Code 本地权限/会话配置
+.claude/
 
 # Checkpointer & Milvus Lite 落盘
 data/

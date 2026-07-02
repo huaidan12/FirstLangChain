@@ -81,7 +81,7 @@ if __name__ == "__main__":
     is_local = os.getenv("PORT") is None
 
     uvicorn.run(
-        "app:app",
+        "projects.bookkeeper.main:app",
         host="0.0.0.0",
         port=port,
         reload=is_local  # 本地开发时为 True，Render 生产环境自动变为 False

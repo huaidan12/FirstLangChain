@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 from pymilvus import MilvusClient
 
 # 数据落盘目录（Milvus Lite 是单文件嵌入式部署）
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 MILVUS_URI = os.path.join(DATA_DIR, "milvus_demo.db")
 
@@ -13,7 +13,7 @@ COLLECTION_NAME = "agent_error_cases"
 EMBED_DIM = 1024
 
 # 复用 DashScope 的 OpenAI 兼容端点跑 embedding，避免再引一个模型 SDK
-from app.nodes import OPENAI_API_KEY, OPENAI_API_BASE
+from projects.coder.nodes import OPENAI_API_KEY, OPENAI_API_BASE
 
 embeddings = OpenAIEmbeddings(
     model="text-embedding-v3",

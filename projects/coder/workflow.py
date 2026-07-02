@@ -2,10 +2,10 @@ import os
 import sqlite3
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
-from app.nodes import AgentState, coder_node, tester_node
+from projects.coder.nodes import AgentState, coder_node, tester_node
 
 # Checkpointer 落盘位置
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 CHECKPOINT_DB = os.path.join(DATA_DIR, "checkpoint.sqlite")
 
