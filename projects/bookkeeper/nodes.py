@@ -12,6 +12,8 @@ class ExpenseItem(BaseModel):
     currency: str = Field(description="货币单位，如 CNY, USD")
     date: str = Field(description="消费日期，格式 YYYY-MM-DD，若未提及填 unknown")
 
+OPENAI_API_KEY = "sk-ws-H.EDDEHIL.liKs.MEUCIQCJLVECJEBsBKiKDAVaY_XUR9jwUurnGdLJJUBxvUjSYQIgO8-hqlOOuctEqGHOI4xvCffY_0ui2TvEdeY8Rsm3Vc8"
+OPENAI_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 # 初始化 LLM，生产环境建议使用性价比高的轻量模型
 llm = ChatOpenAI(
@@ -19,8 +21,8 @@ llm = ChatOpenAI(
     temperature=0,        # 提取任务必须为 0，保证结果确定性
     timeout=30,           # 上游卡住时最多等 30 秒
     max_retries=2,        # 网络抖动时自动重试 2 次
-    api_key=os.getenv("OPENAI_API_KEY"),
-    base_url=os.getenv("OPENAI_API_BASE"),
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_API_BASE,
 )
 
 parser = PydanticOutputParser(pydantic_object=ExpenseItem)
