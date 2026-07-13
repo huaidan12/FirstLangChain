@@ -30,7 +30,6 @@ async def run_agent_task(payload: TaskRequest):
     # Checkpointer 按 thread_id 切分会话快照，未指定则随机生成
     thread_id = payload.thread_id or uuid.uuid4().hex
     config = {"configurable": {"thread_id": thread_id}}
-
     try:
         # 同步阻塞唤醒 Agent 工作流
         final_output = agent_executor.invoke(initial_state, config=config)

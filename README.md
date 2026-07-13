@@ -26,17 +26,23 @@
 ## 目录结构
 
 ```
-app/
-  ├── main.py             FastAPI 入口
-  ├── workflow.py         LangGraph StateGraph + SqliteSaver 挂载
-  ├── nodes.py            coder_node / tester_node + LLM 客户端
-  ├── sandbox.py          subprocess 沙箱
-  └── knowledge_base.py   Milvus Lite 封装（建表/灌种子/检索）
+main.py                   项目根聚合入口，mount 两个子应用
+projects/
+  ├── coder/              LangGraph 代码生成 Agent
+  │   ├── main.py         FastAPI 子应用（/run_task）
+  │   ├── workflow.py     StateGraph + SqliteSaver 挂载
+  │   ├── nodes.py        coder_node / tester_node + LLM 客户端
+  │   ├── sandbox.py      subprocess 沙箱
+  │   └── knowledge_base.py  Milvus Lite 封装（建表/灌种子/检索）
+  └── bookkeeper/         财务报销结构化提取
+      └── main.py         FastAPI 子应用（/api/expense/extract）
 data/                     运行时生成（已 gitignore）
   ├── checkpoint.sqlite   LangGraph 状态快照
   └── milvus_demo.db/     Milvus Lite 数据目录
 requirements.txt
 ```
+
+后文所有 `app/xxx.py` 的路径引用都对应 `projects/coder/xxx.py`，代码搬迁后没改字段/逻辑，行号也保持一致。
 
 ## 安装
 
@@ -59,14 +65,29 @@ arch -arm64 ./venv/bin/pip install --force-reinstall --no-deps \
 
 ## 运行
 
+项目根 `main.py` 是聚合入口，把两个子应用挂载到不同前缀下，一条命令同时暴露：
+
 ```bash
-arch -arm64 ./venv/bin/python -m uvicorn app.main:app --reload
+arch -arm64 ./venv/bin/python -m uvicorn main:app --reload
+```
+
+- `POST /coder/run_task` —— LangGraph 代码生成 Agent
+- `POST /bookkeeper/api/expense/extract` —— 财务报销结构化提取
+- `GET /` —— 列出可用服务
+
+只想单独跑其中一个，也可以直接指到子应用：
+
+```bash
+# 只跑 coder
+arch -arm64 ./venv/bin/python -m uvicorn projects.coder.main:app --reload
+# 只跑 bookkeeper
+arch -arm64 ./venv/bin/python -m uvicorn projects.bookkeeper.main:app --reload
 ```
 
 调用：
 
 ```bash
-curl -X POST http://localhost:8000/run_task \
+curl -X POST http://localhost:8000/coder/run_task \
   -H 'Content-Type: application/json' \
   -d '{"requirement": "写一个 execute() 函数，打印从 1 加到 100 的结果"}'
 ```
@@ -86,7 +107,7 @@ curl -X POST http://localhost:8000/run_task \
 带 `thread_id` 复用上次的会话状态：
 
 ```bash
-curl -X POST http://localhost:8000/run_task \
+curl -X POST http://localhost:8000/coder/run_task \
   -H 'Content-Type: application/json' \
   -d '{"requirement": "...", "thread_id": "a1b2c3..."}'
 ```
