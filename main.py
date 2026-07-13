@@ -17,13 +17,13 @@ from projects.bookkeeper.main import app as bookkeeper_app
 # 换到长驻托管（Render / Railway / Fly.io / 自建 VM）并挂持久盘之后，
 # 把下面两行注释放开即可恢复 coder 服务：
 #
-# from projects.coder.main import app as coder_app
-# app.mount("/coder", coder_app)
+from projects.coder.main import app as coder_app
 # ────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="AI 多项目聚合入口")
 
 app.mount("/bookkeeper", bookkeeper_app)
+app.mount("/coder", coder_app)
 
 
 @app.get("/")
@@ -31,7 +31,7 @@ async def index():
     return {
         "services": {
             "bookkeeper": "/bookkeeper/api/expense/extract",
-            # "coder": "/coder/run_task",  # 长驻环境部署后放开
+            "coder": "/coder/run_task",  # 长驻环境部署后放开
         }
     }
 
