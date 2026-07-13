@@ -1,18 +1,10 @@
-fastapi>=0.110.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.6.0
-python-dotenv>=1.0.0
-langgraph>=0.2.0,<0.3.0
+# Vercel 部署用的精简依赖：只保留 bookkeeper 需要的包
+# 完整依赖（含 coder：LangGraph + Milvus Lite）见 requirements-local.txt
+# 换到 Render / Railway / 自建长驻环境时，请用 requirements-local.txt 安装
 
-# 推荐这样配置以确保两者的兼容性
+fastapi>=0.110.0
+pydantic>=2.6.0
+
+# LangChain 生态
 langchain-core>=0.3.0,<0.4.0
 langchain-openai>=0.3.0,<0.4.0
-
-# Checkpointer：用 SQLite 做轻量持久化（替代 PostgresSaver）
-# 锁版本避免 pip 把 langgraph-checkpoint 升到 4.x 与 langgraph 0.2.x 冲突
-langgraph-checkpoint-sqlite>=2.0.0,<3.0.0
-
-# 向量知识库：Milvus Lite 单文件嵌入式部署 + LangChain 集成
-# langchain-milvus 0.2+ 要求 langchain-core 1.x，与 langchain-openai 0.3.x 不兼容
-pymilvus[milvus_lite]>=2.4.2
-langchain-milvus>=0.1.0,<0.2.0

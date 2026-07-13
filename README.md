@@ -48,9 +48,18 @@ requirements.txt
 
 > ⚠️ **macOS 用户注意架构**：本仓库的 venv 历史曾有部分 wheel 是 x86_64 的，在 Apple Silicon 上 import 会报 `incompatible architecture`。所有 pip / python 命令都建议显式 `arch -arm64` 前缀。
 
+依赖分两份：
+
+| 文件 | 场景 | 内容 |
+|---|---|---|
+| `requirements.txt` | **Vercel 部署**（自动读取） | 只装 bookkeeper 需要的包 |
+| `requirements-local.txt` | **本地 / 长驻托管** | 完整依赖，含 LangGraph + Milvus Lite |
+
+本地开发要跑 coder，装完整版：
+
 ```bash
 python3 -m venv venv
-arch -arm64 ./venv/bin/pip install -r requirements.txt
+arch -arm64 ./venv/bin/pip install -r requirements-local.txt
 ```
 
 如果遇到二进制包架构不匹配（`pydantic-core`、`xxhash`、`uvloop` 等），强制重装：
@@ -116,6 +125,40 @@ curl -X POST http://localhost:8000/coder/run_task \
   -H 'Content-Type: application/json' \
   -d '{"requirement": "...", "thread_id": "a1b2c3..."}'
 ```
+
+## 部署到 Vercel（当前默认）
+
+项目根有一份 `vercel.json`，把 `main.py` 声明为 Serverless 入口。**注意：只有 bookkeeper 能上 Vercel**，coder 依赖本地磁盘（SqliteSaver / Milvus Lite），在 Serverless 的只读文件系统里会崩在 import 阶段，所以 `main.py` 里 coder 的挂载已经注释掉了。
+
+### 步骤
+
+1. `git push` 触发 Vercel 自动构建，或用 `vercel` CLI 一键部署
+2. Vercel 会自动读取根 `requirements.txt`（精简版）+ `vercel.json`
+3. 在 Vercel 控制台 → Settings → Environment Variables 里配 API Key（如果你之前从 `nodes.py` 里改回环境变量的话）
+
+### 部署后访问
+
+```bash
+# 服务索引
+curl https://<project>.vercel.app/
+
+# Bookkeeper
+curl -X POST https://<project>.vercel.app/bookkeeper/api/expense/extract \
+  -H 'Content-Type: application/json' \
+  -d '{"raw_text": "昨天在星巴克花了 38 元买咖啡"}'
+```
+
+### Vercel 限制清单
+
+- **超时**：Hobby 层 10s、Pro 60s。DashScope 慢时可能被切
+- **打包体积**：解压后 250 MB 上限。当前精简 `requirements.txt` 稳妥在限内；如果为了跑 coder 把完整依赖塞进来，pymilvus 会把包撑爆
+- **没有持久盘**：所以 coder 必须继续注释
+
+### 如何恢复 coder（换到长驻环境后）
+
+1. 把 `main.py` 里 `from projects.coder.main import app as coder_app` 和 `app.mount("/coder", coder_app)` 两行放开
+2. 用 `requirements-local.txt` 替换 `requirements.txt`（或直接部署时指定完整依赖）
+3. 部署到下面的 Render（或类似长驻环境）
 
 ## 部署到 Render
 
