@@ -65,15 +65,20 @@ arch -arm64 ./venv/bin/pip install --force-reinstall --no-deps \
 
 ## 运行
 
-项目根 `main.py` 是聚合入口，把两个子应用挂载到不同前缀下，一条命令同时暴露：
+项目根 `main.py` 是聚合入口，一条命令启动：
 
 ```bash
 arch -arm64 ./venv/bin/python -m uvicorn main:app --reload
 ```
 
-- `POST /coder/run_task` —— LangGraph 代码生成 Agent
+**当前默认只挂载 bookkeeper**（为了兼容 Vercel Serverless）：
+
 - `POST /bookkeeper/api/expense/extract` —— 财务报销结构化提取
 - `GET /` —— 列出可用服务
+
+> ⚠️ **coder 默认被注释掉了**。它依赖 SqliteSaver / Milvus Lite 写本地盘，Vercel 这类 Serverless 环境跑不了。换到长驻环境（Render / Railway / Fly.io / VM）后，在 `main.py` 里放开 `coder_app` 的 import 和 mount 两行即可恢复。届时新增的端点：
+>
+> - `POST /coder/run_task` —— LangGraph 代码生成 Agent
 
 只想单独跑其中一个，也可以直接指到子应用：
 
@@ -111,6 +116,61 @@ curl -X POST http://localhost:8000/coder/run_task \
   -H 'Content-Type: application/json' \
   -d '{"requirement": "...", "thread_id": "a1b2c3..."}'
 ```
+
+## 部署到 Render
+
+代码里 `PORT` / `reload` 判断就是照 Render 写的。Render 提供长驻容器 + Persistent Disk，正好匹配本项目对 `data/` 的可写、可持久要求；Vercel / Netlify 这类 Serverless 平台不适用（`/var/task` 只读、跨请求丢盘、冷启动会重灌 Milvus 种子）。
+
+### 1. 建 Web Service
+
+- **Runtime**: Python 3(与本地一致，建议 3.11+)
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**（二选一）：
+  ```
+  uvicorn main:app --host 0.0.0.0 --port $PORT
+  ```
+  或直接：
+  ```
+  python main.py
+  ```
+- **Environment Variables**: `PORT` 由 Render 自动注入，不用手填。API Key 目前是硬编码在 `projects/*/nodes.py` 里，先跑通没问题；上生产之前建议改成 `os.getenv("OPENAI_API_KEY")` 再在 Render 面板配环境变量。
+
+### 2. 挂 Persistent Disk（必须）
+
+`projects/coder/workflow.py` 的 `DATA_DIR` 会解析到**项目根目录**下的 `data/`，Render 部署时是 `/opt/render/project/src/data`。要让 `checkpoint.sqlite` 和 `milvus_demo.db/` 重启不丢，就把 Persistent Disk 挂到这个路径：
+
+| 字段 | 值 |
+|---|---|
+| Mount Path | `/opt/render/project/src/data` |
+| Size | 1 GB 起够用（Milvus Lite 种子极小，SQLite 也不大） |
+
+不挂盘的后果：容器重启后 `thread_id` 全丢；每次冷启动都要重跑一次种子灌入，多花 5 次 embedding API 调用。
+
+### 3. 验证
+
+部署完 Render 给一个 `https://<name>.onrender.com` 域名：
+
+```bash
+# 服务索引（列出可用子应用）
+curl https://<name>.onrender.com/
+
+# Coder
+curl -X POST https://<name>.onrender.com/coder/run_task \
+  -H 'Content-Type: application/json' \
+  -d '{"requirement": "写一个 execute() 函数，打印从 1 加到 100 的结果"}'
+
+# Bookkeeper
+curl -X POST https://<name>.onrender.com/bookkeeper/api/expense/extract \
+  -H 'Content-Type: application/json' \
+  -d '{"raw_text": "昨天在星巴克花了 38 元买咖啡"}'
+```
+
+Swagger 文档：`/coder/docs` 和 `/bookkeeper/docs`（根路径 `/docs` 是聚合 app 的空文档，没意义）。
+
+### 4. Free 层的两个坑
+
+- **Free 层没有 Persistent Disk**，只能用付费方案挂盘；否则容器重建即失忆。
+- **Free 层 15 分钟空闲会休眠**，第一次请求触发冷启动 + Milvus load_collection + LangGraph 编译，可能 10~20 秒才响应。生产建议直接用 Starter 及以上并挂盘。
 
 ## RAG 数据流转
 
