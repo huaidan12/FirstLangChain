@@ -53,6 +53,10 @@ async def run_agent_task(payload: TaskRequest):
         tags=["coder-agent"],
         metadata={"requirement": payload.requirement},
     )
+    # DEBUG: 确认 handler 初始化成功
+    print(f"[DEBUG] langfuse handler: host={LANGFUSE_HOST}, "
+          f"public_key={LANGFUSE_PUBLIC_KEY[:12] if LANGFUSE_PUBLIC_KEY else None}..., "
+          f"auth={langfuse_handler.auth_check() if hasattr(langfuse_handler, 'auth_check') else 'no-check'}")
 
     config = {
         "configurable": {"thread_id": thread_id},
@@ -61,6 +65,11 @@ async def run_agent_task(payload: TaskRequest):
     try:
         # 同步阻塞唤醒 Agent 工作流
         final_output = agent_executor.invoke(initial_state, config=config)
+
+        # 每次请求跑完立即把 Langfuse 事件推到服务器，
+        # 避免异步批量上报导致面板延迟；开发/调试很友好，
+        # 生产高 QPS 场景可去掉这行走默认异步以降低尾延迟。
+        langfuse_handler.flush()
 
         status = "COMPLETED" if not final_output["error_msg"] else "FAILED"
         return TaskResponse(
@@ -88,4 +97,12 @@ def _flush_langfuse():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("projects.coder.main:app", host="0.0.0.0", port=8000, reload=True)
+    # reload_excludes：忽略 sandbox 落地的 tmp_*.py 与 sqlite 文件，
+    # 否则 WatchFiles 会在请求进行中触发热重启，把 langfuse 上报中断，导致 trace 丢失。
+    uvicorn.run(
+        "projects.coder.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        reload_excludes=["tmp_*.py", "*.sqlite", "data/*"],
+    )
