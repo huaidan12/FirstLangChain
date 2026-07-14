@@ -10,6 +10,8 @@ langgraph>=0.2.0,<0.3.0
 # 推荐这样配置以确保两者的兼容性
 langchain-core>=0.3.0,<0.4.0
 langchain-openai>=0.3.0,<0.4.0
+# langfuse 的 langchain integration 会 import 这个元包做检测
+langchain>=0.3.0,<0.4.0
 
 # Checkpointer：用 SQLite 做轻量持久化（替代 PostgresSaver）
 # 锁版本避免 pip 把 langgraph-checkpoint 升到 4.x 与 langgraph 0.2.x 冲突
@@ -19,3 +21,6 @@ langgraph-checkpoint-sqlite>=2.0.0,<3.0.0
 # langchain-milvus 0.2+ 要求 langchain-core 1.x，与 langchain-openai 0.3.x 不兼容
 pymilvus[milvus_lite]>=2.4.2
 langchain-milvus>=0.1.0,<0.2.0
+
+# 可观测性：langfuse 2.x 兼容 langchain-core 0.3.x；3.x 已迁移新回调 API
+langfuse>=2.50.0,<3.0.0
