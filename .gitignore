@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+.env.*
 .idea/
 *.iml
 .DS_Store
@@ -13,3 +14,6 @@ __pycache__/
 
 # Checkpointer & Milvus Lite 落盘
 data/
+
+# FC 部署构建产物
+_deps/

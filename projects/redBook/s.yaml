@@ -1,0 +1,60 @@
+# 阿里云函数计算 FC 3.0 部署描述文件
+# 使用 Serverless Devs 部署： s deploy
+# 首次使用先执行 s config add 配置阿里云 AccessKey
+
+edition: 3.0.0
+name: redbook-app
+access: default
+
+vars:
+  region: cn-hangzhou
+
+resources:
+  redbook_svc:
+    component: fc3
+    props:
+      region: ${vars.region}
+      functionName: redbook-titles
+      description: 小红书爆款标题生成服务（供 Coze 插件调用）
+      runtime: custom.debian12
+      handler: index.handler       # custom runtime 走 bootstrap，此字段不生效但必填
+      timeout: 60                  # 秒
+      memorySize: 512              # MB
+      cpu: 0.5
+      diskSize: 512
+      instanceConcurrency: 5       # 单实例并发，Redis INCR 原子，不冲突
+      code: ./
+      # 日志服务：auto 表示由 FC 自动创建 SLS project + logstore
+      logConfig: auto
+      customRuntimeConfig:
+        command:
+          - ./bootstrap
+        port: 9000
+      environmentVariables:
+        # ---- LLM ----
+        LLM_MODEL: deepseek-v3
+        LLM_API_BASE: https://dashscope.aliyuncs.com/compatible-mode/v1
+        LLM_API_KEY: ${env('LLM_API_KEY')}
+        # ---- Redis（阿里云 Redis 内网地址） ----
+        REDIS_HOST: ${env('REDIS_HOST')}
+        REDIS_PORT: "6379"
+        REDIS_PASSWORD: ${env('REDIS_PASSWORD')}
+        # ---- 业务 ----
+        DAILY_LIMIT: "5"
+        API_KEYS: ${env('API_KEYS')}   # 多个用逗号分隔，Coze 侧配其中一个
+      # 访问阿里云 Redis 需要 VPC 打通，填你 Redis 所在 VPC 信息
+      vpcConfig:
+        vpcId: ${env('VPC_ID')}
+        vSwitchIds:
+          - ${env('VSWITCH_ID')}
+        securityGroupId: ${env('SECURITY_GROUP_ID')}
+      # 触发器：HTTP 直连，Coze 通过公网 URL 调用
+      triggers:
+        - triggerName: httpTrigger
+          triggerType: http
+          triggerConfig:
+            authType: anonymous     # 鉴权靠应用层 API Key
+            methods:
+              - GET
+              - POST
+              - OPTIONS
